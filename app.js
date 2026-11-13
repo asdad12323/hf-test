@@ -14,7 +14,7 @@ map.on('locationerror',e=>toast(e.code===1?'Localização bloqueada: permite o a
 function toast(t){let d=$('#toast');if(!d){d=document.createElement('div');d.id='toast';d.className='toast';document.body.append(d)}d.textContent=t;d.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>d.hidden=true,5000)}
 map.createPane('buses').style.zIndex=660; // acima das etiquetas das paragens (650), abaixo dos popups (700)
 const G={shapes:L.layerGroup().addTo(map),stops:L.layerGroup().addTo(map),buses:L.layerGroup().addTo(map)};
-let lines=[],sel=new Set(store('sel')||['04']),stopMarks=[],busMarks=new Map(),vehicles=[],fitted=false;
+let lines=[],sel=new Set(store('sel')||['01','02','04']),stopMarks=[],busMarks=new Map(),vehicles=[],fitted=false;
 
 // ---- linhas
 function chips(){const f=$('#q').value.toLowerCase();
@@ -83,19 +83,4 @@ async function refresh(){if(busy)return;if(!sel.size){drawBuses([]);$('#list').i
   busy=true;try{const d=await j('/api/vehicles?lines='+[...sel].join(','));drawBuses(d.vehicles);status(`${d.vehicles.length} autocarros · atualizado às ${d.at} · a cada 10 s${sel.size>6?' (muitas linhas: só destinos)':''}`)}
   catch(e){status('Erro: '+e.message,1)}busy=false}
 
-// ---- varredura da rede: paragens 00001–05000 (inclusivo), em blocos de 25
-const SCAN_MAX=5000,CH=25,allM=new Map(),ALL=L.layerGroup().addTo(map);let scanOn=store('scan')!==false,loopOn=false; // para arrancar desligado: store('scan')===true
-$('#scan').checked=scanOn;
-$('#scan').onchange=e=>{scanOn=e.target.checked;store('scan',scanOn);if(scanOn)loopScan();else{ALL.clearLayers();allM.clear();$('#st2').textContent=''}};
-function upsertAll(k,v){if(busMarks.has(k)){const o=allM.get(k);if(o){ALL.removeLayer(o);allM.delete(k)}return}
-  const html=`<div class="pop"><h3>Linha ${esc(v.line)} · autocarro ${v.vehicle}</h3><b>${esc(v.headsign)}</b><br>Atraso: ${dly(v.delay)[0]}<br><span class="sub">visto na varredura geral</span></div>`;let m=allM.get(k);
-  if(!m){m=L.marker([v.lat,v.lon],{icon:L.divIcon({className:'bus-m',iconSize:[0,0],html:`<div class="bus all" style="--c:${v.color}">${esc(v.short)} <small>${v.vehicle}</small></div>`}),pane:'buses'}).bindPopup(html,{maxWidth:Math.min(300,innerWidth-40)}).addTo(ALL);allM.set(k,m)}
-  else{m.setLatLng([v.lat,v.lon]);m.getPopup().setContent(html)}}
-async function sweep(){const starts=[];for(let a=1;a<=SCAN_MAX;a+=CH)starts.push(a);const seen=new Set();let done=0,fail=0;
-  await Promise.all([0,1,2].map(async()=>{while(starts.length&&scanOn&&!document.hidden){const a=starts.shift();
-    try{(await j(`/api/scan?from=${a}&to=${Math.min(a+CH-1,SCAN_MAX)}`)).vehicles.forEach(v=>{const k=v.vehicle+'|'+v.line;seen.add(k);upsertAll(k,v)})}catch{fail++}
-    $('#st2').textContent=`Varredura ${Math.min(SCAN_MAX,++done*CH)}/${SCAN_MAX}${fail?' · '+fail+' falhas':''} · ${allM.size} autocarros na rede`}}));
-  if(!starts.length)for(const[k,m]of allM)if(!seen.has(k)){ALL.removeLayer(m);allM.delete(k)}}
-async function loopScan(){if(loopOn)return;loopOn=true;while(scanOn){if(document.hidden){await new Promise(r=>setTimeout(r,3000));continue}await sweep();await new Promise(r=>setTimeout(r,15000))}loopOn=false}
-
-(async()=>{try{lines=await j('/api/lines');chips();await draw();refresh();loopScan();setInterval(()=>document.hidden||refresh(),10000);document.addEventListener('visibilitychange',()=>document.hidden||refresh())}catch(e){status('Erro: '+e.message+' — o servidor está a correr?',1)}})();
+(async()=>{try{lines=await j('/api/lines');chips();await draw();refresh();setInterval(()=>document.hidden||refresh(),10000);document.addEventListener('visibilitychange',()=>document.hidden||refresh())}catch(e){status('Erro: '+e.message+' — o servidor está a correr?',1)}})();
