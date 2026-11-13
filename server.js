@@ -93,18 +93,6 @@ async function vehicles(ids) {
   vcache.set(key, { t: Date.now(), v }); return v;
 }
 
-// varredura da rede: paragens from..to (inclusivo, ids de 5 dígitos: 00001–05000), máx. 40 por pedido
-async function scan(from, to) {
-  const a = Math.max(1, +from || 1), b = Math.min(5000, +to || a), ids = [];
-  for (let i = a; i <= b && ids.length < 40; i++) ids.push(String(i).padStart(5, '0'));
-  const res = await pool(ids, 10, async id => ((await api('getTempoRealParagem', { stop_id: id }, 20000)) || {}).data || []);
-  const out = new Map(); let ok = 0;
-  for (const rows of res) { if (!rows) continue; ok++;
-    for (const x of rows) if (x.has_real_time_data && x.vehicle_lat != null) { const k = x.vehicle_number + '|' + x.numero_novo;
-      if (!out.has(k)) out.set(k, { vehicle: x.vehicle_number, line: x.numero_novo, short: x.line_id, color: '#' + x.route_color, headsign: x.headsign, lat: +x.vehicle_lat, lon: +x.vehicle_lon, delay: x.delay_seconds ?? null }); } }
-  return { from: a, to: b, checked: ids.length, ok, vehicles: [...out.values()] };
-}
-
 const stopInfo = async id => (((await api('getTempoRealParagem', { stop_id: id }, 5000)) || {}).data || []).map(x => ({
   line: x.numero_novo, short: x.line_id, color: '#' + x.route_color, headsign: x.headsign, sched: x.scheduled_time, display: x.display_time,
   live: !!x.has_real_time_data, eta: x.eta_seconds ?? null, delay: x.delay_seconds ?? null, vehicle: x.vehicle_number, atStop: !!x.at_stop }));
@@ -131,7 +119,6 @@ http.createServer(async (req, res) => {
     if (u.pathname === '/api/line') return send(200, await lineData(q.line));
     if (u.pathname === '/api/vehicles') return send(200, await vehicles((q.lines || '').split(',').filter(Boolean)));
     if (u.pathname === '/api/stop') return send(200, await stopInfo(q.id));
-    if (u.pathname === '/api/scan') return send(200, await scan(q.from, q.to));
     const files = { '/': ['index.html', 'text/html'], '/index.html': ['index.html', 'text/html'], '/style.css': ['style.css', 'text/css'], '/app.js': ['app.js', 'text/javascript'] };
     const f = files[u.pathname]; if (!f) return send(404, { error: 'not found' });
     send(200, fs.readFileSync(path.join(__dirname, f[0]), 'utf8'), f[1]);
